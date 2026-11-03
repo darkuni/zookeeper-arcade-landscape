@@ -10,6 +10,7 @@ import "github.com/hajimehoshi/ebiten/v2"
 //	Start                 1 player start
 //	X or Y                2 player start
 //	Right bumper          change view
+//	Left bumper           Zoo Keeper+ panels on / off
 //	Select + Start held   quit (about one second)
 type padState struct {
 	left, right, up, down bool
@@ -17,12 +18,13 @@ type padState struct {
 	start1, start2        bool
 	coin                  bool // one-frame pulse
 	view                  bool // one-frame pulse
+	plus                  bool // one-frame pulse
 	quit                  bool
 }
 
 func (t *padTracker) poll() padState {
 	var s padState
-	var sel, start, view bool
+	var sel, start, view, lb bool
 	ids := ebiten.AppendGamepadIDs(nil)
 	t.connected = false
 	for _, id := range ids {
@@ -42,6 +44,7 @@ func (t *padTracker) poll() padState {
 		sel = sel || b(ebiten.StandardGamepadButtonCenterLeft)
 		start = start || b(ebiten.StandardGamepadButtonCenterRight)
 		view = view || b(ebiten.StandardGamepadButtonFrontTopRight)
+		lb = lb || b(ebiten.StandardGamepadButtonFrontTopLeft)
 		if b(ebiten.StandardGamepadButtonRightLeft) || b(ebiten.StandardGamepadButtonRightTop) {
 			s.start2 = true
 		}
@@ -52,5 +55,7 @@ func (t *padTracker) poll() padState {
 	}
 	s.view = view && !t.prevView
 	t.prevView = view
+	s.plus = lb && !t.prevLB
+	t.prevLB = lb
 	return s
 }

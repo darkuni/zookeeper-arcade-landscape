@@ -93,6 +93,10 @@ type Board struct {
 	Frames    int
 
 	// sound
+	// Hook, when set, is called with the data CPU's program counter just
+	// before each of its instructions (used for statistics, not for emulation).
+	Hook func(pc uint16)
+
 	dacValue                 byte
 	volume                   byte
 	dacLast                  float64

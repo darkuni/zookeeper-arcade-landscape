@@ -1,4 +1,4 @@
-# Zoo Keeper - widescreen native port
+# Zoo Keeper+ - widescreen native port
 
 Taito's 1982 Zoo Keeper (Qix-family hardware) as a native Go + Ebitengine program, re-laid-out for 16:9.
 
@@ -17,11 +17,24 @@ the working directory, your home folder, or pass a zip / folder path as an argum
 
 ## Controls
 
-Arrows move, Z / Space jump, 5 coin, 1 / 2 start, L cycle view (widescreen / original / cabinet 4:3), F11 full screen, Esc quit.
+Arrows move, Z / Space jump, 5 coin, 1 / 2 start, L cycle view (widescreen / original / cabinet 4:3), P Classic / Plus panels, F11 full screen, Esc quit.
 Service switches: F1 Test Advance, F2 Next Line, F3 Slew Up, F4 Slew Down.
 
 **Gamepad:** D-pad / left stick move, A or B jump, Select = coin, Start = 1 player, X or Y = 2 players,
-right bumper = change view, hold Select + Start for a second to quit.
+right bumper = change view, left bumper = Plus panels on / off, hold Select + Start for a second to quit.
+
+## Classic or Plus
+
+The game itself is never changed - Plus only adds read-outs in the widescreen side panels. For the plain original:
+press **P** (or the left bumper) to switch the panels off, press **L** for the original square picture, or start the
+program with `-classic` (original square view, no panels). `-plus` goes back to widescreen with panels. The choice is remembered.
+
+Plus shows:
+
+- **Round** - read from the game's own round counter. **Bonus screen** - the original plays its bonus screen after every second round (it tests bit 1 of its level counter), so this counts down to the next even round.
+- **Animals held** - at the end of each round, the animals still inside the zoo (the ones the game pays a bonus for), per species, with an all-time total. Each species' picture is copied from the screen the first time it appears, so the list fills in as you meet them.
+- **Jumps** and **Steps** - counted from your controls while a real game is running (a step is 8 frames of walking). They are estimates, not values from the game.
+- **All time** - games, best round, jumps, steps, saved in `stats.json` next to the settings.
 
 ## Widescreen
 
@@ -31,7 +44,7 @@ side panels. Title and service screens show the whole picture.
 ## First run
 
 The game needs its settings memory (NVRAM) initialised. The port does that automatically on first launch
-(about a second or two before the window opens) and stores it in your user config folder under `zookeeper/`.
+(about a second or two before the window opens) and stores it in your user config folder under `zookeeper/`, together with `settings.json` and `stats.json`.
 
 ## Status
 

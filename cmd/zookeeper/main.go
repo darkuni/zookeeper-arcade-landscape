@@ -9,10 +9,17 @@
 // F11 toggle full screen, Esc quit. F1-F4 are the cabinet's service switches.
 //
 // Gamepad: D-pad/left stick move, A or B jump, Select coin, Start 1 player,
-// X or Y 2 players, right bumper change view, hold Select+Start to quit.
+// X or Y 2 players, right bumper change view, left bumper Classic / Plus,
+// hold Select+Start to quit.
+//
+// Zoo Keeper+ adds read-outs in the widescreen side panels (round, bonus
+// screen, jumps, steps, animals held). P (or the left bumper) switches them
+// off; the original square view (L) and the -classic option give the plain
+// original game.
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -28,6 +35,7 @@ import (
 
 	"zookeeper/internal/assets"
 	"zookeeper/internal/board"
+	"zookeeper/internal/stats"
 	"zookeeper/internal/video"
 )
 
@@ -42,6 +50,8 @@ type app struct {
 	view   int // 0 widescreen, 1 original square, 2 cabinet 4:3
 	pad    padTracker
 	ring   *ring
+	plus   bool // show the Zoo Keeper+ side panels
+	tr     *stats.Tracker
 	frames int
 	lastNV [0x400]byte
 }
@@ -86,6 +96,10 @@ func (a *app) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyL) {
 		a.view = (a.view + 1) % 3
 	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyP) {
+		a.plus = !a.plus
+		a.saveSettings()
+	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyF11) {
 		ebiten.SetFullscreen(!ebiten.IsFullscreen())
 	}
@@ -96,6 +110,10 @@ func (a *app) Update() error {
 	}
 	if pd.view {
 		a.view = (a.view + 1) % 3
+	}
+	if pd.plus {
+		a.plus = !a.plus
+		a.saveSettings()
 	}
 	joy := byte(0xff)
 	if down(ebiten.KeyRight) || pd.right {
@@ -137,15 +155,20 @@ func (a *app) Update() error {
 	a.target += 1e9 / 60
 	a.b.RunTo(a.target)
 	a.ring.write(a.b.DrainSamples())
+	a.tr.Frame(a.b, joy, a.comp.Framed(), a.b.Frame[:])
 	a.frames++
 	if a.frames%600 == 0 {
 		a.saveNVRAM()
+		a.saveStats()
 	}
 	return nil
 }
 
 func (a *app) Draw(screen *ebiten.Image) {
 	img, bg := a.comp.Build(a.b.Frame[:], a.view)
+	if a.plus && a.view == 0 && a.comp.Framed() {
+		stats.DrawPanels(img, a.tr)
+	}
 	w, h := img.Bounds().Dx(), img.Bounds().Dy()
 	if a.screen == nil || a.screen.Bounds().Dx() != w || a.screen.Bounds().Dy() != h {
 		a.screen = ebiten.NewImage(w, h)
@@ -207,14 +230,64 @@ func (a *app) saveNVRAM() {
 	}
 }
 
+// settings (which view, Classic or Plus) are remembered between runs.
+type settings struct {
+	View int
+	Plus bool
+}
+
+func configFile(name string) string {
+	d, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(d, "zookeeper", name)
+}
+
+func (a *app) saveSettings() {
+	f := configFile("settings.json")
+	if f == "" {
+		return
+	}
+	d, _ := json.Marshal(settings{View: a.view, Plus: a.plus})
+	_ = os.MkdirAll(filepath.Dir(f), 0o755)
+	_ = os.WriteFile(f, d, 0o644)
+}
+
+func loadSettings() settings {
+	s := settings{View: 0, Plus: true}
+	if f := configFile("settings.json"); f != "" {
+		if d, err := os.ReadFile(f); err == nil {
+			_ = json.Unmarshal(d, &s)
+		}
+	}
+	if s.View < 0 || s.View > 2 {
+		s.View = 0
+	}
+	return s
+}
+
+func (a *app) saveStats() {
+	if f := configFile("stats.json"); f != "" && a.tr.Dirty {
+		_ = os.MkdirAll(filepath.Dir(f), 0o755)
+		_ = a.tr.Save(f)
+	}
+}
+
 // ---- ROM lookup ----------------------------------------------------------
 
 // findROMs returns the ROM sets it can find: the paths given on the command
 // line, or zookeep.zip (and friends, and a "roms" folder) next to the program,
 // in the working directory, or in the home folder.
 func findROMs() []string {
-	if len(os.Args) > 1 {
-		return os.Args[1:]
+	var given []string
+	for _, a := range os.Args[1:] {
+		if len(a) > 0 && a[0] != '-' {
+			given = append(given, a)
+		}
+	}
+	if len(given) > 0 {
+		return given
 	}
 	dirs := []string{"."}
 	if exe, err := os.Executable(); err == nil {
@@ -305,12 +378,29 @@ func main() {
 	}
 	b.NVRAM = nv
 	b.Reset()
+	st := loadSettings()
+	for _, arg := range os.Args[1:] {
+		if arg == "-classic" || arg == "--classic" {
+			// the plain original game: square picture, no extra read-outs
+			st.View, st.Plus = 1, false
+		}
+		if arg == "-plus" || arg == "--plus" {
+			st.View, st.Plus = 0, true
+		}
+	}
 	a := &app{
 		b:      b,
 		comp:   video.NewComposer(),
 		ring:   &ring{},
 		lastNV: [0x400]byte{},
+		view:   st.View,
+		plus:   st.Plus,
+		tr:     stats.New(),
 	}
+	if f := configFile("stats.json"); f != "" {
+		a.tr.Load(f)
+	}
+	b.Hook = func(pc uint16) { a.tr.OnPC(b, pc) }
 	if !have {
 		a.saveNVRAM()
 	} else {
@@ -329,6 +419,8 @@ func main() {
 	ebiten.SetTPS(60)
 	err = ebiten.RunGame(a)
 	a.saveNVRAM()
+	a.saveStats()
+	a.saveSettings()
 	if err != nil && !errors.Is(err, ebiten.Termination) {
 		log.Fatal(err)
 	}

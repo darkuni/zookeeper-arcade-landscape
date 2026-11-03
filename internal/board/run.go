@@ -138,6 +138,9 @@ func (b *Board) Step() {
 	}
 	switch which {
 	case 0:
+		if b.Hook != nil {
+			b.Hook(b.Data.PC)
+		}
 		b.tData += float64(b.Data.Step()) * nsData
 	case 1:
 		b.tVideo += float64(b.Video.Step()) * nsData

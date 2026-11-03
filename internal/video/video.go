@@ -22,7 +22,7 @@ type rect struct{ x, y, w, h int }
 
 // Parts of the in-game picture (which has a yellow frame round it).
 var (
-	field    = rect{4, 30, 248, 202} // the play area with a little of the frame round it
+	field    = rect{4, 28, 248, 212} // the whole play area including its top and bottom frame
 	hudScore = rect{11, 8, 58, 20}   // player 1 score
 	hudKeep  = rect{77, 8, 48, 20}   // keepers left (number and icon)
 	hudScor2 = rect{188, 8, 57, 20}  // player 2 score
@@ -51,10 +51,12 @@ func at(src []byte, x, y int) color.RGBA {
 	return color.RGBA{src[o], src[o+1], src[o+2], src[o+3]}
 }
 
-// isFramed reports whether the picture has the yellow border of the play screen.
+// isFramed reports whether the picture has the coloured border of the play
+// screen. The border colour changes from round to round, so any one colour
+// that is not black and is the same at every sample point counts.
 func isFramed(src []byte) bool {
 	y := at(src, 5, 128)
-	if !(y.R > 200 && y.G > 200 && y.B < 130) {
+	if y.R == 0 && y.G == 0 && y.B == 0 {
 		return false
 	}
 	return at(src, 250, 128) == y && at(src, 128, 233) == y && at(src, 5, 228) == y && at(src, 250, 100) == y
@@ -93,15 +95,14 @@ func (c *Composer) Build(src []byte, view int) (*image.RGBA, color.RGBA) {
 		c.pending = 0
 	}
 	if view == 0 && c.framed && f {
-		yel := at(src, 5, 128)
-		fill(c.land, rect{0, 0, LandW, LandH}, yel)
+		fill(c.land, rect{0, 0, LandW, LandH}, black)
 		fx := (LandW - field.w) / 2
 		fy := (LandH - field.h) / 2
 		blit(c.land, src, field, fx, fy)
 		blit(c.land, src, hudScore, 8, 8)
 		blit(c.land, src, hudKeep, 8, 32)
 		blit(c.land, src, hudScor2, LandW-8-hudScor2.w, 8)
-		return c.land, yel
+		return c.land, black
 	}
 	copy(c.full.Pix, src[:ShownH*SrcW*4])
 	return c.full, black

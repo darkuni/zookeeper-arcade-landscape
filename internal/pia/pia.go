@@ -98,7 +98,7 @@ func (p *PIA) Read(r byte) byte {
 		v := p.readA()
 		p.irqa1, p.irqa2 = false, false
 		// CA2 read handshake / pulse
-		if p.cra&0x30 == 0x30 {
+		if p.cra&0x30 == 0x20 {
 			switch p.cra & 0x38 {
 			case 0x20: // handshake: low until CA1 active edge
 				p.setCA2(false)

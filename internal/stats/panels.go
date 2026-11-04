@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+
+	"zookeeper/internal/video"
 )
 
 var (
@@ -35,10 +37,35 @@ func blitIcon(dst *image.RGBA, ic *image.RGBA, x, y int) {
 }
 
 // DrawPanels fills the free areas beside the play field of the widescreen
-// canvas (384x216) with the Zoo Keeper+ read-outs.
+// canvas (384x216) with the Zoo Keeper+ read-outs. The read-outs follow the
+// player whose turn it is; both score boxes stay visible so the other
+// player's score can always be seen.
 func DrawPanels(dst *image.RGBA, t *Tracker) {
-	// ---- left: this game -------------------------------------------------
-	x, y := 7, 58
+	cur := t.Cur
+	if !t.Active {
+		cur = 0
+	}
+	game, life := &t.GameP[cur], &t.LifeP[cur]
+
+	// ---- player labels above the two score boxes -------------------------
+	boxW := 58
+	label := func(text string, x, w int, on bool) {
+		c := colDim
+		if on {
+			c = colHot
+		}
+		DrawText(dst, x+(w-TextWidth(text, 1))/2, video.HudY-8, text, c, 1)
+	}
+	label("PLAYER 1", video.P1X, boxW, !t.Active || cur == 0)
+	if !t.Active || t.Players > 1 {
+		label("PLAYER 2", video.P2X, 57, t.Active && cur == 1)
+	}
+
+	// ---- left: this player's game ----------------------------------------
+	x, y := 7, 64
+	if t.Players > 1 && t.Active {
+		DrawText(dst, x, y-8, fmt.Sprintf("PLAYER %d STATS", cur+1), colHot, 1)
+	}
 	row := func(label, value string, hot bool, scale int) {
 		DrawText(dst, x, y, label, colLabel, 1)
 		c := colValue
@@ -62,24 +89,24 @@ func DrawPanels(dst *image.RGBA, t *Tracker) {
 	} else {
 		row("BONUS SCREEN", fmt.Sprintf("AFTER RD %d", bonus), false, 1)
 	}
-	row("JUMPS", num(t.Game.Jumps), false, 2)
-	row("STEPS", num(t.Game.Steps), false, 2)
+	row("JUMPS", num(game.Jumps), false, 2)
+	row("STEPS", num(game.Steps), false, 2)
 
-	y += 4
+	y += 2
 	DrawText(dst, x, y, "ALL TIME", colHot, 1)
 	y += 8
 	for _, kv := range [][2]string{
-		{"GAMES", num(t.Life.Games)},
-		{"BEST RD", num(t.Life.BestRound)},
-		{"JUMPS", num(t.Life.Jumps)},
-		{"STEPS", num(t.Life.Steps)},
+		{"GAMES", num(life.Games)},
+		{"BEST RD", num(life.BestRound)},
+		{"JUMPS", num(life.Jumps)},
+		{"STEPS", num(life.Steps)},
 	} {
 		DrawText(dst, x, y, kv[0], colDim, 1)
 		DrawText(dst, x+TextWidth(kv[0]+" ", 1), y, kv[1], colValue, 1)
 		y += 7
 	}
 
-	// ---- right: high score, best jump, then every animal ----------------
+	// ---- right: high score, best jump, then every animal -----------------
 	const colX0, colW = 316, 68
 	centre := func(txt string, y, scale int, c color.RGBA) {
 		for scale > 1 && TextWidth(txt, scale) > colW-4 {
@@ -87,29 +114,29 @@ func DrawPanels(dst *image.RGBA, t *Tracker) {
 		}
 		DrawText(dst, colX0+(colW-TextWidth(txt, scale))/2, y, txt, c, scale)
 	}
-	ry := 8
+	ry := video.HudY + 26
 	centre("HIGH SCORE", ry, 1, colLabel)
 	centre(num(t.High), ry+7, 2, colValue)
 	ry += 21
 	centre("BEST JUMP", ry, 1, colLabel)
-	centre(num(t.Life.BestJump), ry+7, 2, colHot)
-	centre("GAME "+num(t.Game.BestJump), ry+19, 1, colDim)
-	ry += 32
+	centre(num(life.BestJump), ry+7, 2, colHot)
+	centre("GAME "+num(game.BestJump), ry+19, 1, colDim)
+	ry += 30
 
 	rx := 322
 	DrawText(dst, rx+16, ry, "HELD", colValue, 1)
 	DrawText(dst, rx+34, ry, "NET", colHot, 1)
-	ry += 9
+	ry += 8
 	for _, sp := range Order {
 		if ic := t.Icon(sp); ic != nil {
 			blitIcon(dst, ic, rx+(14-ic.Bounds().Dx())/2, ry+(13-ic.Bounds().Dy())/2)
 		} else {
 			DrawText(dst, rx+5, ry+4, "?", colDim, 1)
 		}
-		DrawText(dst, rx+16, ry, num(t.Game.Held[sp]), colValue, 1)
-		DrawText(dst, rx+34, ry, num(t.Game.Net[sp]), colHot, 1)
-		DrawText(dst, rx+16, ry+7, num(t.Life.Held[sp]), colDim, 1)
-		DrawText(dst, rx+34, ry+7, num(t.Life.Net[sp]), colDim, 1)
-		ry += 19
+		DrawText(dst, rx+16, ry, num(game.Held[sp]), colValue, 1)
+		DrawText(dst, rx+34, ry, num(game.Net[sp]), colHot, 1)
+		DrawText(dst, rx+16, ry+7, num(life.Held[sp]), colDim, 1)
+		DrawText(dst, rx+34, ry+7, num(life.Net[sp]), colDim, 1)
+		ry += 18
 	}
 }

@@ -39,6 +39,14 @@ type Composer struct {
 	full    *image.RGBA
 }
 
+// Where the score boxes sit on the widescreen canvas (the stats package
+// puts its player labels just above them).
+const (
+	HudY = 12
+	P1X  = 8
+	P2X  = 321
+)
+
 func NewComposer() *Composer {
 	return &Composer{
 		land: image.NewRGBA(image.Rect(0, 0, LandW, LandH)),
@@ -122,9 +130,9 @@ func (c *Composer) Build(src []byte, view int) (*image.RGBA, color.RGBA) {
 		fx := (LandW - field.w) / 2
 		fy := (LandH - field.h) / 2
 		blit(c.land, src, field, fx, fy)
-		blitBlack(c.land, src, hudScore, 8, 8)
-		blitBlack(c.land, src, hudKeep, 8, 32)
-		blitBlack(c.land, src, hudScor2, LandW-8-hudScor2.w, 8)
+		blitBlack(c.land, src, hudScore, P1X, HudY)
+		blitBlack(c.land, src, hudKeep, P1X, HudY+24)
+		blitBlack(c.land, src, hudScor2, P2X, HudY)
 		return c.land, black
 	}
 	copy(c.full.Pix, src[:ShownH*SrcW*4])

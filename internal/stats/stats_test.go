@@ -25,7 +25,7 @@ func TestNewGameNeedsAStartPress(t *testing.T) {
 	}
 	tr.lastStart = tr.frame
 	tr.OnPC(nil, pcNewGame)
-	if !tr.Active || tr.Life.Games != 1 {
+	if !tr.Active || tr.LifeP[0].Games != 1 {
 		t.Fatal("a started game should be tracked")
 	}
 	tr.OnPC(nil, pcGameOver)
@@ -59,8 +59,8 @@ func TestFindSprite(t *testing.T) {
 
 func TestSaveLoadRoundTrip(t *testing.T) {
 	tr := New()
-	tr.Life = Counts{Games: 3, Rounds: 7, Jumps: 99, Steps: 1234, BestRound: 4}
-	tr.Life.Held[4] = 12
+	tr.LifeP[0] = Counts{Games: 3, Rounds: 7, Jumps: 99, Steps: 1234, BestRound: 4}
+	tr.LifeP[0].Held[4] = 12
 	ic := image.NewRGBA(image.Rect(0, 0, 4, 3))
 	ic.SetRGBA(1, 1, color.RGBA{255, 0, 0, 255})
 	tr.Icons[4] = ic
@@ -70,8 +70,8 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 	u := New()
 	u.Load(path)
-	if u.Life != tr.Life {
-		t.Fatalf("totals differ: %+v vs %+v", u.Life, tr.Life)
+	if u.LifeP != tr.LifeP {
+		t.Fatalf("totals differ: %+v vs %+v", u.LifeP, tr.LifeP)
 	}
 	if u.Icons[4] == nil || u.Icons[4].RGBAAt(1, 1) != (color.RGBA{255, 0, 0, 255}) {
 		t.Fatal("icon not restored")
@@ -82,10 +82,29 @@ func TestDrawPanelsDoesNotPanic(t *testing.T) {
 	dst := image.NewRGBA(image.Rect(0, 0, 384, 216))
 	tr := New()
 	tr.Active, tr.Round = true, 12
-	tr.Game.Held[0], tr.Life.Held[0] = 1234567, 9999999
+	tr.GameP[0].Held[0], tr.LifeP[0].Held[0] = 1234567, 9999999
 	tr.Icons[0] = image.NewRGBA(image.Rect(0, 0, 13, 11))
 	DrawPanels(dst, tr)
 	if num(1234567) != "1,234,567" {
 		t.Fatal("number formatting")
 	}
+}
+
+func TestTwoPlayerSetupAndSeparateTotals(t *testing.T) {
+	tr := New()
+	tr.lastStart = tr.frame
+	tr.OnPC(nil, pcNewGame) // player 1
+	if tr.Players != 1 || tr.LifeP[0].Games != 1 || tr.LifeP[1].Games != 0 {
+		t.Fatal("one player after the first set-up")
+	}
+	tr.Cur = 1
+	tr.Game().Jumps = 5
+	tr.Cur = 0
+	if tr.GameP[0].Jumps != 0 || tr.GameP[1].Jumps != 5 {
+		t.Fatal("totals must be kept per player")
+	}
+	tr.Players = 2
+	dst := image.NewRGBA(image.Rect(0, 0, 384, 216))
+	tr.Cur = 1
+	DrawPanels(dst, tr)
 }

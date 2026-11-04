@@ -49,22 +49,39 @@ const (
 const stepFrames = 8
 
 type Tracker struct {
-	Game, Life Counts
-	Icons      [MaxSpecies]*image.RGBA
-	Active     bool // a real (not attract-mode) game is running
-	Round      int  // current round, 1 based
-	Dirty      bool // Life or Icons changed and should be saved
-	High       int  // the game's own best score (first entry of its high-score table)
-	LastJump   int  // points of the latest landing
+	GameP, LifeP [2]Counts // this game / all time, one set per player seat
+	Players      int       // 1 or 2 players in the running game
+	Cur          int       // whose turn it is: 0 = player 1, 1 = player 2
+	Icons        [MaxSpecies]*image.RGBA
+	Active       bool // a real (not attract-mode) game is running
+	Round        int  // current round, 1 based
+	Dirty        bool // Life or Icons changed and should be saved
+	High         int  // the game's own best score (first entry of its high-score table)
+	LastJump     int  // points of the latest landing
 
-	frame     int
-	lastStart int
-	prevBtn   bool
-	moves     int
-	mu        sync.Mutex
+	frame      int
+	lastStart  int
+	startFrame int
+	prevBtn    bool
+	moves      int
+	mu         sync.Mutex
 }
 
-func New() *Tracker { return &Tracker{lastStart: -1000} }
+func New() *Tracker { return &Tracker{lastStart: -1000, Players: 1} }
+
+// Game and Life are the current player's totals for this game and for all
+// games.
+func (t *Tracker) Game() *Counts { return &t.GameP[t.Cur] }
+func (t *Tracker) Life() *Counts { return &t.LifeP[t.Cur] }
+
+// seat is the player (0 or 1) whose turn the game is running.
+func seat(b *board.Board) int {
+	u := int(b.Data.Bus.Read(ramPlayerPtr))<<8 | int(b.Data.Bus.Read(ramPlayerPtr+1))
+	if u >= 2 {
+		return 1
+	}
+	return 0
+}
 
 func bcd(v byte) int { return int(v>>4)*10 + int(v&15) }
 
@@ -72,12 +89,25 @@ func bcd(v byte) int { return int(v>>4)*10 + int(v&15) }
 func (t *Tracker) OnPC(b *board.Board, pc uint16) {
 	switch pc {
 	case pcNewGame:
-		if t.frame-t.lastStart < 600 && !t.Active {
-			t.Game = Counts{}
+		p := 0
+		if b != nil && b.Data.U >= 2 {
+			p = 1
+		}
+		switch {
+		case t.frame-t.lastStart < 600 && !t.Active && p == 0:
+			t.GameP = [2]Counts{}
 			t.Active = true
+			t.Players, t.Cur = 1, 0
 			t.Round = 1
-			t.Life.Games++
-			t.Game.Games = 1
+			t.startFrame = t.frame
+			t.LifeP[0].Games++
+			t.GameP[0].Games = 1
+			t.Dirty = true
+		case t.Active && p == 1 && t.frame-t.startFrame < 120:
+			// a two player game sets up the second player right after the first
+			t.Players = 2
+			t.LifeP[1].Games++
+			t.GameP[1].Games = 1
 			t.Dirty = true
 		}
 	case pcGameOver:
@@ -93,12 +123,13 @@ func (t *Tracker) OnPC(b *board.Board, pc uint16) {
 		if pts <= 0 {
 			return
 		}
+		t.Cur = seat(b)
 		t.LastJump = pts
-		if pts > t.Game.BestJump {
-			t.Game.BestJump = pts
+		if pts > t.Game().BestJump {
+			t.Game().BestJump = pts
 		}
-		if pts > t.Life.BestJump {
-			t.Life.BestJump = pts
+		if pts > t.Life().BestJump {
+			t.Life().BestJump = pts
 			t.Dirty = true
 		}
 	case pcAnimalNetted:
@@ -111,8 +142,9 @@ func (t *Tracker) OnPC(b *board.Board, pc uint16) {
 			return
 		}
 		sp := int(rd(uint16(ramAnimalTyp+off))>>1) % MaxSpecies
-		t.Game.Net[sp]++
-		t.Life.Net[sp]++
+		t.Cur = seat(b)
+		t.Game().Net[sp]++
+		t.Life().Net[sp]++
 		t.Dirty = true
 	case pcRoundDone:
 		if !t.Active {
@@ -127,14 +159,16 @@ func (t *Tracker) OnPC(b *board.Board, pc uint16) {
 				held++
 			}
 		}
-		t.Game.Rounds++
-		t.Life.Rounds++
-		if t.Game.Rounds > t.Life.BestRound {
-			t.Life.BestRound = t.Game.Rounds
+		t.Cur = seat(b)
+		g, l := t.Game(), t.Life()
+		g.Rounds++
+		l.Rounds++
+		if g.Rounds > l.BestRound {
+			l.BestRound = g.Rounds
 		}
-		t.Game.BestRound = t.Game.Rounds
-		t.Game.Held[sp] += held
-		t.Life.Held[sp] += held
+		g.BestRound = g.Rounds
+		g.Held[sp] += held
+		l.Held[sp] += held
 		t.Dirty = true
 	}
 }
@@ -152,21 +186,22 @@ func (t *Tracker) Frame(b *board.Board, joy byte, framed bool, pix []byte) {
 	btn := joy&board.JoyButton == 0
 	if t.Active && framed {
 		if btn && !t.prevBtn {
-			t.Game.Jumps++
-			t.Life.Jumps++
+			t.Game().Jumps++
+			t.Life().Jumps++
 			t.Dirty = true
 		}
 		if joy&(board.JoyUp|board.JoyDown|board.JoyLeft|board.JoyRight) != board.JoyUp|board.JoyDown|board.JoyLeft|board.JoyRight {
 			t.moves++
 			if t.moves >= stepFrames {
 				t.moves = 0
-				t.Game.Steps++
-				t.Life.Steps++
+				t.Game().Steps++
+				t.Life().Steps++
 			}
 		}
 	}
 	t.prevBtn = btn
 	if t.Active {
+		t.Cur = seat(b)
 		u := int(b.Data.Bus.Read(ramPlayerPtr))<<8 | int(b.Data.Bus.Read(ramPlayerPtr+1))
 		r := bcd(b.Data.Bus.Read(uint16(u+ramRoundsBCD))) + 1
 		if r > 0 && r < 100 {
@@ -253,8 +288,9 @@ func FindSprite(pix []byte) *image.RGBA {
 // ---- saving ------------------------------------------------------------
 
 type saved struct {
-	Life  Counts
-	IconV int // icons from older builds were cropped differently and are dropped
+	Life  Counts // player 1 (the name is kept so older files still load)
+	Life2 Counts // player 2
+	IconV int    // icons from older builds were cropped differently and are dropped
 	Icons [MaxSpecies][]byte
 }
 
@@ -270,7 +306,7 @@ func (t *Tracker) Load(path string) {
 	if json.Unmarshal(d, &s) != nil {
 		return
 	}
-	t.Life = s.Life
+	t.LifeP[0], t.LifeP[1] = s.Life, s.Life2
 	for i, b := range s.Icons {
 		if len(b) == 0 || s.IconV != iconVersion {
 			continue
@@ -289,7 +325,7 @@ func (t *Tracker) Load(path string) {
 
 // Save writes totals and icons to path.
 func (t *Tracker) Save(path string) error {
-	s := saved{Life: t.Life, IconV: iconVersion}
+	s := saved{Life: t.LifeP[0], Life2: t.LifeP[1], IconV: iconVersion}
 	for i := range t.Icons {
 		ic := t.Icon(i)
 		if ic == nil {

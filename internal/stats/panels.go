@@ -79,27 +79,24 @@ func DrawPanels(dst *image.RGBA, t *Tracker) {
 		y += 7
 	}
 
-	// ---- right: animals held in the zoo ----------------------------------
-	rx, ry := 322, 34
-	DrawText(dst, rx, ry, "ANIMALS HELD", colLabel, 1)
+	// ---- right: every animal, from the start of the game ----------------
+	rx, ry := 316, 30
+	DrawText(dst, rx, ry, "ZOO", colLabel, 1)
+	DrawText(dst, rx+TextWidth("ZOO ", 1), ry, "HELD", colValue, 1)
+	DrawText(dst, rx+TextWidth("ZOO HELD ", 1), ry, "NET", colHot, 1)
 	ry += 9
-	shown := 0
-	for i := 0; i < MaxSpecies; i++ {
-		if t.Life.Held[i] == 0 && t.Game.Held[i] == 0 {
-			continue
-		}
-		shown++
-		if t.Icons[i] != nil {
-			ic := t.Icons[i]
-			blitIcon(dst, ic, rx+(14-ic.Bounds().Dx())/2, ry+(12-ic.Bounds().Dy())/2)
+	for _, sp := range Order {
+		if ic := t.Icon(sp); ic != nil {
+			blitIcon(dst, ic, rx+(14-ic.Bounds().Dx())/2, ry+(13-ic.Bounds().Dy())/2)
 		} else {
-			DrawText(dst, rx+4, ry+3, "?", colDim, 1)
+			DrawText(dst, rx+5, ry+4, "?", colDim, 1)
 		}
-		DrawText(dst, rx+18, ry, num(t.Game.Held[i]), colValue, 2)
-		DrawText(dst, rx+18, ry+12, "ALL "+num(t.Life.Held[i]), colDim, 1)
-		ry += 22
+		DrawText(dst, rx+17, ry, num(t.Game.Held[sp]), colValue, 1)
+		DrawText(dst, rx+37, ry, num(t.Game.Net[sp]), colHot, 1)
+		DrawText(dst, rx+17, ry+7, num(t.Life.Held[sp]), colDim, 1)
+		DrawText(dst, rx+37, ry+7, num(t.Life.Net[sp]), colDim, 1)
+		ry += 20
 	}
-	if shown == 0 {
-		DrawText(dst, rx, ry, "NONE YET", colDim, 1)
-	}
+	DrawText(dst, rx, ry, "BRIGHT GAME", colValue, 1)
+	DrawText(dst, rx, ry+7, "DIM ALL TIME", colDim, 1)
 }

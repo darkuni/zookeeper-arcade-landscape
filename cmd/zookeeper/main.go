@@ -401,6 +401,10 @@ func main() {
 		a.tr.Load(f)
 	}
 	b.Hook = func(pc uint16) { a.tr.OnPC(b, pc) }
+	if a.tr.MissingIcons() {
+		// learn what the animals look like from the player's own ROMs
+		go stats.Harvest(roms, board.FactoryNVRAM(roms), a.tr.SetIcon)
+	}
 	if !have {
 		a.saveNVRAM()
 	} else {

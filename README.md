@@ -32,7 +32,7 @@ program with `-classic` (original square view, no panels). `-plus` goes back to 
 Plus shows:
 
 - **Round** - read from the game's own round counter. **Bonus screen** - the original plays its bonus screen after every second round (it tests bit 1 of its level counter), so this counts down to the next even round.
-- **Animals held** - at the end of each round, the animals still inside the zoo (the ones the game pays a bonus for), per species, with an all-time total. Each species' picture is copied from the screen the first time it appears, so the list fills in as you meet them.
+- **Zoo (right side)** - all six animals are shown from the start of a game, each with two counters: **HELD** (animals still inside the zoo when you complete a round, the ones the game pays a bonus for) and **NET** (animals you caught and sent back to the cage). Bright numbers are this game, dim numbers are all-time. The pictures are copied from the game's own screen by a quick background run on first launch (a few seconds, then saved), so no artwork is bundled; a `?` shows until a picture is ready.
 - **Jumps** and **Steps** - counted from your controls while a real game is running (a step is 8 frames of walking). They are estimates, not values from the game.
 - **All time** - games, best round, jumps, steps, saved in `stats.json` next to the settings.
 

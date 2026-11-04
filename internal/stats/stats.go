@@ -11,6 +11,7 @@ import (
 	"image/color"
 	"image/png"
 	"os"
+	"sync"
 
 	"zookeeper/internal/board"
 )
@@ -24,7 +25,8 @@ type Counts struct {
 	Jumps     int
 	Steps     int
 	BestRound int
-	Held      [MaxSpecies]int
+	Held      [MaxSpecies]int // animals still in the zoo when a round was completed
+	Net       [MaxSpecies]int // animals netted and put back in the cage
 }
 
 // Program addresses in the original data-CPU ROM that the tracker watches.
@@ -54,8 +56,7 @@ type Tracker struct {
 	lastStart int
 	prevBtn   bool
 	moves     int
-	capLeft   int
-	capSpec   int
+	mu        sync.Mutex
 }
 
 func New() *Tracker { return &Tracker{lastStart: -1000} }
@@ -79,6 +80,19 @@ func (t *Tracker) OnPC(b *board.Board, pc uint16) {
 			t.Active = false
 			t.Dirty = true
 		}
+	case pcAnimalNetted:
+		if !t.Active {
+			return
+		}
+		rd := func(a uint16) byte { return b.Data.Bus.Read(a) }
+		off := int(rd(ramCurSlot))<<8 | int(rd(ramCurSlot+1))
+		if off < 0 || off > 62 {
+			return
+		}
+		sp := int(rd(uint16(ramAnimalTyp+off))>>1) % MaxSpecies
+		t.Game.Net[sp]++
+		t.Life.Net[sp]++
+		t.Dirty = true
 	case pcRoundDone:
 		if !t.Active {
 			return
@@ -100,7 +114,6 @@ func (t *Tracker) OnPC(b *board.Board, pc uint16) {
 		t.Game.BestRound = t.Game.Rounds
 		t.Game.Held[sp] += held
 		t.Life.Held[sp] += held
-		t.capLeft, t.capSpec = 3, sp
 		t.Dirty = true
 	}
 }
@@ -135,15 +148,6 @@ func (t *Tracker) Frame(b *board.Board, joy byte, framed bool, pix []byte) {
 		r := bcd(b.Data.Bus.Read(uint16(u+ramRoundsBCD))) + 1
 		if r > 0 && r < 100 {
 			t.Round = r
-		}
-	}
-	if t.capLeft > 0 {
-		t.capLeft--
-		if t.capLeft == 0 {
-			if ic := FindSprite(pix); ic != nil {
-				t.Icons[t.capSpec] = ic
-				t.Dirty = true
-			}
 		}
 	}
 }
@@ -227,8 +231,11 @@ func FindSprite(pix []byte) *image.RGBA {
 
 type saved struct {
 	Life  Counts
+	IconV int // icons from older builds were cropped differently and are dropped
 	Icons [MaxSpecies][]byte
 }
+
+const iconVersion = 2
 
 // Load reads totals and learned icons from path (missing file is fine).
 func (t *Tracker) Load(path string) {
@@ -242,7 +249,7 @@ func (t *Tracker) Load(path string) {
 	}
 	t.Life = s.Life
 	for i, b := range s.Icons {
-		if len(b) == 0 {
+		if len(b) == 0 || s.IconV != iconVersion {
 			continue
 		}
 		if im, err := png.Decode(bytes.NewReader(b)); err == nil {
@@ -259,8 +266,9 @@ func (t *Tracker) Load(path string) {
 
 // Save writes totals and icons to path.
 func (t *Tracker) Save(path string) error {
-	s := saved{Life: t.Life}
-	for i, ic := range t.Icons {
+	s := saved{Life: t.Life, IconV: iconVersion}
+	for i := range t.Icons {
+		ic := t.Icon(i)
 		if ic == nil {
 			continue
 		}
@@ -275,4 +283,29 @@ func (t *Tracker) Save(path string) error {
 	}
 	t.Dirty = false
 	return os.WriteFile(path, d, 0o644)
+}
+
+// Icon returns the picture of species sp, or nil if it is not known yet.
+func (t *Tracker) Icon(sp int) *image.RGBA {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.Icons[sp]
+}
+
+// SetIcon stores a picture found by Harvest.
+func (t *Tracker) SetIcon(sp int, ic *image.RGBA) {
+	t.mu.Lock()
+	t.Icons[sp] = ic
+	t.mu.Unlock()
+	t.Dirty = true
+}
+
+// MissingIcons reports whether any of the six species still has no picture.
+func (t *Tracker) MissingIcons() bool {
+	for sp := 0; sp < 6; sp++ {
+		if t.Icon(sp) == nil {
+			return true
+		}
+	}
+	return false
 }

@@ -27,13 +27,16 @@ type Counts struct {
 	BestRound int
 	Held      [MaxSpecies]int // animals still in the zoo when a round was completed
 	Net       [MaxSpecies]int // animals netted and put back in the cage
+	BestJump  int             // most points one landing has paid
 }
 
 // Program addresses in the original data-CPU ROM that the tracker watches.
 const (
-	pcNewGame   = 0xb985 // CLR $04b5,U: a player's game state is cleared
-	pcGameOver  = 0xc84c // GAME OVER is printed
-	pcRoundDone = 0xc965 // INC rounds-completed (ROUND n COMPLETED)
+	pcNewGame    = 0xb985 // CLR $04b5,U: a player's game state is cleared
+	pcGameOver   = 0xc84c // GAME OVER is printed
+	pcRoundDone  = 0xc965 // INC rounds-completed (ROUND n COMPLETED)
+	pcJumpPoints = 0xb3aa // landing bonus popup: U = its text, about to be drawn
+	nvHigh       = 0x261  // first high-score entry in battery RAM (BCD)
 
 	ramRoundsBCD = 0x4b5 // + U: rounds completed, BCD
 	ramPlayerPtr = 0x4b1 // U: base of the current player's state
@@ -51,6 +54,8 @@ type Tracker struct {
 	Active     bool // a real (not attract-mode) game is running
 	Round      int  // current round, 1 based
 	Dirty      bool // Life or Icons changed and should be saved
+	High       int  // the game's own best score (first entry of its high-score table)
+	LastJump   int  // points of the latest landing
 
 	frame     int
 	lastStart int
@@ -78,6 +83,22 @@ func (t *Tracker) OnPC(b *board.Board, pc uint16) {
 	case pcGameOver:
 		if t.Active {
 			t.Active = false
+			t.Dirty = true
+		}
+	case pcJumpPoints:
+		if !t.Active {
+			return
+		}
+		pts := jumpPoints(b)
+		if pts <= 0 {
+			return
+		}
+		t.LastJump = pts
+		if pts > t.Game.BestJump {
+			t.Game.BestJump = pts
+		}
+		if pts > t.Life.BestJump {
+			t.Life.BestJump = pts
 			t.Dirty = true
 		}
 	case pcAnimalNetted:
@@ -123,6 +144,8 @@ func (t *Tracker) OnPC(b *board.Board, pc uint16) {
 // and the 256-wide RGBA frame.
 func (t *Tracker) Frame(b *board.Board, joy byte, framed bool, pix []byte) {
 	t.frame++
+	// the game's high-score table lives in battery RAM: 3 BCD bytes first
+	t.High = bcd(b.NVRAM[nvHigh])*10000 + bcd(b.NVRAM[nvHigh+1])*100 + bcd(b.NVRAM[nvHigh+2])
 	if joy&(board.JoyStart1|board.JoyStart2) != board.JoyStart1|board.JoyStart2 {
 		t.lastStart = t.frame
 	}
@@ -308,4 +331,26 @@ func (t *Tracker) MissingIcons() bool {
 		}
 	}
 	return false
+}
+
+// jumpPoints reads the number the game is about to print as the landing
+// bonus: it points U at a string (first byte a width, then characters, the
+// last with bit 7 set or a zero) and calls the text routine.
+func jumpPoints(b *board.Board) int {
+	u := b.Data.U
+	n, any := 0, false
+	for k := uint16(1); k < 14; k++ {
+		c := b.Data.Bus.Read(u + k)
+		if c == 0 || c&0x80 != 0 {
+			break
+		}
+		if c >= '0' && c <= '9' {
+			n = n*10 + int(c-'0')
+			any = true
+		}
+	}
+	if !any {
+		return 0
+	}
+	return n
 }

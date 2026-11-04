@@ -75,6 +75,12 @@ func blit(dst *image.RGBA, src []byte, r rect, dx, dy int) {
 // stays on the play field only.
 func blitBlack(dst *image.RGBA, src []byte, r rect, dx, dy int) {
 	bg := at(src, r.x, r.y)
+	if bg != at(src, 20, 128) {
+		// the box is not in the field's colour (e.g. the white box of
+		// round 1): leave it as the game draws it
+		blit(dst, src, r, dx, dy)
+		return
+	}
 	for y := 0; y < r.h; y++ {
 		for x := 0; x < r.w; x++ {
 			c := at(src, r.x+x, r.y+y)

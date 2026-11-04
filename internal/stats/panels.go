@@ -79,8 +79,24 @@ func DrawPanels(dst *image.RGBA, t *Tracker) {
 		y += 7
 	}
 
-	// ---- right: every animal, from the start of the game ----------------
-	rx, ry := 322, 32
+	// ---- right: high score, best jump, then every animal ----------------
+	const colX0, colW = 316, 68
+	centre := func(txt string, y, scale int, c color.RGBA) {
+		for scale > 1 && TextWidth(txt, scale) > colW-4 {
+			scale--
+		}
+		DrawText(dst, colX0+(colW-TextWidth(txt, scale))/2, y, txt, c, scale)
+	}
+	ry := 8
+	centre("HIGH SCORE", ry, 1, colLabel)
+	centre(num(t.High), ry+7, 2, colValue)
+	ry += 21
+	centre("BEST JUMP", ry, 1, colLabel)
+	centre(num(t.Life.BestJump), ry+7, 2, colHot)
+	centre("GAME "+num(t.Game.BestJump), ry+19, 1, colDim)
+	ry += 32
+
+	rx := 322
 	DrawText(dst, rx+16, ry, "HELD", colValue, 1)
 	DrawText(dst, rx+34, ry, "NET", colHot, 1)
 	ry += 9
@@ -94,6 +110,6 @@ func DrawPanels(dst *image.RGBA, t *Tracker) {
 		DrawText(dst, rx+34, ry, num(t.Game.Net[sp]), colHot, 1)
 		DrawText(dst, rx+16, ry+7, num(t.Life.Held[sp]), colDim, 1)
 		DrawText(dst, rx+34, ry+7, num(t.Life.Net[sp]), colDim, 1)
-		ry += 20
+		ry += 19
 	}
 }

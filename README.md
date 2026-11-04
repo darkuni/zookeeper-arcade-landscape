@@ -55,3 +55,4 @@ and gamepad behaviour on real hardware are still being tested.
 
 Publishing a GitHub release runs `.github/workflows/release.yml`, which builds `zookeeper.exe` (Windows),
 `ZooKeeper-linux.tar.gz` (Linux x86_64, Steam Deck / SteamOS desktop mode) and `ZooKeeper-mac.zip` (universal macOS app).
+- **High score and Best jump (top right)** - the high score is the game's own best score (first entry of its high-score table). Best jump is the most points one landing has paid (the game pays 100, 500, 2,000, 6,000 ... up to 2,000,000 depending on how many animals Zeke cleared); it is read from the points popup the game draws and kept across games, with this game's best in dim text under it.

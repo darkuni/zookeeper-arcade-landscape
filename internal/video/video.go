@@ -70,6 +70,23 @@ func blit(dst *image.RGBA, src []byte, r rect, dx, dy int) {
 	}
 }
 
+// blitBlack copies a HUD box like blit but turns the box's own background
+// colour (the round colour, taken from its corner) into black, so the colour
+// stays on the play field only.
+func blitBlack(dst *image.RGBA, src []byte, r rect, dx, dy int) {
+	bg := at(src, r.x, r.y)
+	for y := 0; y < r.h; y++ {
+		for x := 0; x < r.w; x++ {
+			c := at(src, r.x+x, r.y+y)
+			if c == bg {
+				c = black
+			}
+			o := dst.PixOffset(dx+x, dy+y)
+			dst.Pix[o], dst.Pix[o+1], dst.Pix[o+2], dst.Pix[o+3] = c.R, c.G, c.B, c.A
+		}
+	}
+}
+
 func fill(dst *image.RGBA, r rect, c color.RGBA) {
 	for y := r.y; y < r.y+r.h; y++ {
 		o := dst.PixOffset(r.x, y)
@@ -99,9 +116,9 @@ func (c *Composer) Build(src []byte, view int) (*image.RGBA, color.RGBA) {
 		fx := (LandW - field.w) / 2
 		fy := (LandH - field.h) / 2
 		blit(c.land, src, field, fx, fy)
-		blit(c.land, src, hudScore, 8, 8)
-		blit(c.land, src, hudKeep, 8, 32)
-		blit(c.land, src, hudScor2, LandW-8-hudScor2.w, 8)
+		blitBlack(c.land, src, hudScore, 8, 8)
+		blitBlack(c.land, src, hudKeep, 8, 32)
+		blitBlack(c.land, src, hudScor2, LandW-8-hudScor2.w, 8)
 		return c.land, black
 	}
 	copy(c.full.Pix, src[:ShownH*SrcW*4])
